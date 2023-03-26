@@ -8,7 +8,7 @@
 
 // #define ARDUINOHA_DEBUG
 
-#define BROKER_ADDR IPAddress(192, 168, 1, 200)
+// #define BROKER_ADDR IPAddress(192, 168, 1, 200)
 const char *mqtt_server = "192.168.1.200";
 const char *mqtt_username = "mqttuser";
 const char *mqtt_password = "12345";
@@ -29,6 +29,8 @@ unsigned long lastMsg = 0;  // millis kontrol tanımı
 unsigned long lastMsg2 = 0; // millis kontrol tanımı
 unsigned long lastMsg3 = 0; // millis kontrol tanımı
 unsigned long lastMsg4 = 0; // millis kontrol tanımı
+unsigned long lastMsg5 = 0; // millis kontrol tanımı
+byte sayac = 0;
 
 #define reset_pin 3
 #define DHTPIN_ev 12
@@ -309,8 +311,14 @@ void onSwitchCommand(bool state, HASwitch *sender)
   if (sender == &modem_on_off)
   {
     digitalWrite(modem_on_off_pin, (state ? PIN_ON : PIN_OFF));
-    Serial.print("Modem_rasppPriz : ");
-    Serial.println(state);
+    if (state == 1)
+    {
+      modem_on_off_durum = true;
+    }
+    else
+    {
+      modem_on_off_durum = false;
+    }
     sender->setState(state);
   }
 
@@ -568,7 +576,7 @@ void reconnect()
 {
   // MQTT sunucusuna bağlan
   // Ethernet.begin(mac);
-  Serial.print("mqtt.isconnected: ");
+  Serial.print("Reconnect=> mqtt.isconnected: ");
   Serial.println(mqtt.isConnected());
 
   if (Ethernet.linkStatus() != 2 && mqtt.isConnected() != 1) //! mqtt.isConnected()
@@ -594,13 +602,16 @@ void alarmMod()
   {
     if (alarm_durum) // alarm aktif ve internet bağlantısı yok ise
     {
-      if (mutfak_pir_durum || koridor_pir1_durum || koridor_pir2_durum || oturma_odasi_pir_durum || yatak_odasi_pir_durum)
+      if (digitalRead(alarm_siren_pin) == PIN_OFF || mutfak_pir_durum || koridor_pir1_durum || koridor_pir2_durum || oturma_odasi_pir_durum || yatak_odasi_pir_durum)
       {
         // Serialde pır durumlarını gösterir.
-        delay(5000);
-        Serial.println("Alarm ON , İntenet bağlantı yok, sensorlerde haraket var. Sireniniii çalıyorum.");
-        digitalWrite(alarm_siren_pin, PIN_ON);
-        alarm_isik_uyarilari(1);
+        delay(3000);
+        if (mutfak_pir_durum || koridor_pir1_durum || koridor_pir2_durum || oturma_odasi_pir_durum || yatak_odasi_pir_durum)
+        {
+          Serial.println("Alarm ON , İntenet bağlantı yok, sensorlerde haraket var. Sireniniii çalıyorum.");
+          digitalWrite(alarm_siren_pin, PIN_ON);
+          alarm_isik_uyarilari(1);
+        }
       }
     }
     else if (!alarm_durum && digitalRead(alarm_siren_pin) == PIN_ON)
@@ -632,6 +643,7 @@ void loop()
 
   if (now - lastMsg4 > 10000)
   {
+
     Serial.print("Bağlantı Kontrol => ");
     Serial.println(Ethernet.linkStatus());
     Serial.print("mqtt.isconnected: ");
@@ -646,8 +658,19 @@ void loop()
     }
     if (internet_baglanti_durum == 1 && mqtt.isConnected() == 0)
     {
-      Serial.println("Bağlanılamıyor. Yeniden başlatıyorum MEGA yı");
-      digitalWrite(reset_pin, LOW);
+
+      Serial.println("Bağlanılamıyor. yeniden başlatıyorum MEGA yı");
+      if (now - lastMsg5 > 1000)
+      {
+        if (sayac == 10)
+        {
+          Serial.print("Sayac: ");
+          Serial.println(sayac);
+          digitalWrite(reset_pin, LOW);
+        }
+        sayac = sayac + 1;
+        lastMsg5 = now;
+      }
     }
     if (internet_baglanti_durum == 2 && mqtt.isConnected() == 1)
     {
@@ -714,7 +737,9 @@ void loop()
     oturma_odasi_pir_durum = digitalRead(oturma_odasi_pir_pin);
     elektrik_onOff_durum = digitalRead(elektrik_onOff_pin);
     internet_baglanti_durum = Ethernet.linkStatus();
+    // modem_on_off_durum = false;
     dbug();
+    akim_volt_olcer();
     // Serial.print("mqtt.isconnected: ");
     // Serial.println(mqtt.isConnected());
     if (!modem_on_off_durum && elektrik_onOff_durum)
@@ -734,7 +759,7 @@ void loop()
       alarm_durum = false;
     }
     alarmMod(); // İnternet olmadığı durumda bu alarmı kontrol ediyoruz.
-    if (modem_on_off_pin == true && internet_baglanti_durum == 1)
+    if (modem_on_off_durum == true && internet_baglanti_durum == 1 && mqtt.isConnected() == 1)
     {
       mutfak_pir.setState(mutfak_pir_durum);
       koridor_pir1.setState(koridor_pir1_durum);
@@ -744,7 +769,8 @@ void loop()
       yatak_odasi_pir.setState(yatak_odasi_pir_durum);
       oturma_odasi_pir.setState(oturma_odasi_pir_durum);
       elektrik_onOff.setState(elektrik_onOff_durum);
-      modem_on_off.setCurrentState(false);
+      modem_on_off.setState(modem_on_off_durum);
+      sayac = 0;
     }
     lastMsg2 = now;
   }
