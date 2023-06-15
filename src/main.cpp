@@ -5,6 +5,7 @@
 #include <DHT_U.h>
 #include <ArduinoJson.h> //Version 5.13.2 olmalı
 #include <ArduinoHA.h>
+#include "ACS712.h"
 
 // #define ARDUINOHA_DEBUG
 
@@ -52,30 +53,30 @@ byte sayac = 0;
 #define kapi_durum_pin 39
 #define banyo_sicaklik_pin 37
 #define banyo_havalandirma_pin 35
-#define titresim_sensor_pin 33
+#define titresim_sensor_pin 29
 #define koridor_led_pin 31
-#define oda_led_pin 29
+#define oda_led_pin 30
 
 // SAĞ Arduino Yanı----------------------------
 #define modem_on_off_pin 38 // Varsayılan açık durmalı
-#define elektrik_onOff_pin 36
+#define elektrik_onOff_pin 19
 #define esp32_alarm_on_off_pin 34
 #define alarm_siren_pin 32
-#define rasberry_on_off_pin 30 // Varsayılan açık durmalı
+// #define rasberry_on_off_pin 31 // Varsayılan açık durmalı
 
 #define reset_pin 3 // Bu pin Megadaki RESET pinine bağlanacak.
-const int akim_sensor_pin = 0;
-#define yatak_odasi_pir_pin 15
-#define cocuk_odasi_pir_pin 16
+const int akim_sensor_pin = A0;
+#define yatak_odasi_pir_pin 33
+#define cocuk_odasi_pir_pin 36
 
 //-----------------------------------------
 
-#define PIN_ON LOW
-#define PIN_OFF HIGH
+#define pin_on LOW
+#define pin_off HIGH
 
 // MQTT Topic Tanımları
 //---------------------------------------
-const char *kombi_role_topic = "aha/deedbafefeeb/kombi/stat_t";
+// const char *kombi_role_topic = "aha/deedbafefeeb/kombi/stat_t";
 const char *kapi_durum_topic = "sensor/kapi_durum";
 const char *alarm_durum_topic = "alarmo/state"; //
 const char *alarmed_home = "armed_home";
@@ -136,12 +137,20 @@ int RawValue = 0;
 int ACSoffset = 2500;
 double voltaj = 0; // VOLT HESABI
 double amper = 0;  // AMPER HESABI
+//-----------------------------
+// int mVperAmp = 66; // use 100 for 20A Module and 66 for 30A Module
 
 void akim_volt_olcer()
 {
-  RawValue = analogRead(akim_sensor_pin);    // MODUL ANALOG DEĞERI OKUNUYOR
-  voltaj = (RawValue / 1024.0) * 5000;       // VOLT HESABI YAPILIYOR
-  amper = ((voltaj - ACSoffset) / mVperAmp); // AKIM HESAPLA
+  RawValue = analogRead(akim_sensor_pin); // MODUL ANALOG DEĞERI OKUNUYOR
+  // voltaj = (RawValue / 1024.0) * 50;      // VOLT HESABI YAPILIYOR
+  for (int i = 0; i < 1000; i++)
+  {
+    voltaj = (voltaj + (.0049 * analogRead(akim_sensor_pin))); // (5 V / 1024 (Analog) = 0.0049) which converter Measured analog input voltage to 5 V Range
+    delay(1);
+  }
+  voltaj = (voltaj / 1000) * 10;
+  amper = ((25 - voltaj) / 48); // AKIM HESAPLA
   Serial.print("=>>>Voltaj: ");
   Serial.print(voltaj);
   Serial.print(" =>Amper: ");
@@ -256,6 +265,7 @@ HASwitch modem_on_off("modem_on_off");
 
 HASwitch kombi("kombi");
 HALight mutfak_isik("mutfak_isik");
+HALight mutfak_led("mutfak_led");
 HALight ana_oda_isik("ana_oda_isik");
 HALight koridor_led("koridor_led");
 HALight oda_led("oda_led");
@@ -270,26 +280,26 @@ void alarm_isik_uyarilari(bool uyari_tip)
     for (size_t i = 0; i < 5; i++)
     {
       Serial.println("Işıklar Açılıp Kapatılıyor. Alarm Tetiklendi.");
-      digitalWrite(mutfak_isik_pin, PIN_OFF);
-      digitalWrite(koridor_led_pin, PIN_OFF);
-      digitalWrite(oda_lambasi_pin, PIN_OFF);
+      digitalWrite(mutfak_isik_pin, pin_off);
+      digitalWrite(koridor_led_pin, pin_off);
+      digitalWrite(oda_lambasi_pin, pin_off);
       delay(2000);
-      digitalWrite(mutfak_isik_pin, PIN_ON);
-      digitalWrite(koridor_led_pin, PIN_ON);
-      digitalWrite(oda_lambasi_pin, PIN_ON);
+      digitalWrite(mutfak_isik_pin, pin_on);
+      digitalWrite(koridor_led_pin, pin_on);
+      digitalWrite(oda_lambasi_pin, pin_on);
     }
   }
   if (uyari_tip == 0)
     Serial.println("Alarm Kapatıldı Uyarı Işıkları....");
   for (size_t i = 0; i < 2; i++)
   {
-    digitalWrite(mutfak_isik_pin, PIN_OFF);
-    digitalWrite(koridor_led_pin, PIN_OFF);
-    digitalWrite(oda_lambasi_pin, PIN_OFF);
+    digitalWrite(mutfak_isik_pin, pin_off);
+    digitalWrite(koridor_led_pin, pin_off);
+    digitalWrite(oda_lambasi_pin, pin_off);
     delay(1000);
-    digitalWrite(mutfak_isik_pin, PIN_OFF);
-    digitalWrite(koridor_led_pin, PIN_OFF);
-    digitalWrite(oda_lambasi_pin, PIN_OFF);
+    digitalWrite(mutfak_isik_pin, pin_off);
+    digitalWrite(koridor_led_pin, pin_off);
+    digitalWrite(oda_lambasi_pin, pin_off);
   }
 }
 
@@ -297,36 +307,36 @@ void onSwitchCommand(bool state, HASwitch *sender)
 {
   if (sender == &kombi)
   {
-    digitalWrite(kombi_role_pin, (state ? PIN_ON : PIN_OFF));
+    digitalWrite(kombi_role_pin, (state ? pin_on : pin_off));
     Serial.print("Kombi Durum: ");
     Serial.println(state);
     sender->setState(state);
   }
   if (sender == &alarm_siren)
   {
-    digitalWrite(alarm_siren_pin, (state ? PIN_ON : PIN_OFF));
-    Serial.print("Alarm Durum: ");
+    digitalWrite(alarm_siren_pin, (state ? pin_on : pin_off));
+    Serial.print("Alarm Siren: ");
     Serial.println(state);
     alarm_isik_uyarilari(state ? 1 : 0);
     sender->setState(state);
   }
   if (sender == &banyo_havalandirma)
   {
-    digitalWrite(banyo_havalandirma_pin, (state ? PIN_ON : PIN_OFF));
+    digitalWrite(banyo_havalandirma_pin, (state ? pin_on : pin_off));
     Serial.print("Banyo Havalandırma Durum: ");
     Serial.println(state);
     sender->setState(state);
   }
   if (sender == &oturma_odasi_priz)
   {
-    digitalWrite(oturma_odasi_priz_pin, (state ? PIN_ON : PIN_OFF));
+    digitalWrite(oturma_odasi_priz_pin, (state ? pin_on : pin_off));
     Serial.print("Oturma Odasi Priz : ");
     Serial.println(state);
     sender->setState(state);
   }
   if (sender == &modem_on_off)
   {
-    digitalWrite(modem_on_off_pin, (state ? PIN_ON : PIN_OFF));
+    digitalWrite(modem_on_off_pin, (state ? pin_on : pin_off));
     if (state == 1)
     {
       modem_on_off_durum = true;
@@ -345,21 +355,35 @@ void onLightCommand(bool state, HALight *sender)
 {
   if (sender == &mutfak_isik)
   {
-    digitalWrite(mutfak_isik_pin, (state ? PIN_ON : PIN_OFF));
+    digitalWrite(mutfak_isik_pin, (state ? pin_on : pin_off));
     Serial.print("mutfak isik Durum: ");
+    Serial.println(state);
+    sender->setState(state);
+  }
+  if (sender == &mutfak_led)
+  {
+    digitalWrite(mutfak_led_isik_pin, (state ? pin_on : pin_off));
+    Serial.print("mutfak led isik Durum: ");
     Serial.println(state);
     sender->setState(state);
   }
   if (sender == &ana_oda_isik)
   {
-    digitalWrite(oda_lambasi_pin, (state ? PIN_ON : PIN_OFF));
+    digitalWrite(oda_lambasi_pin, (state ? pin_on : pin_off));
     Serial.print("oturma odası isik Durum: ");
+    Serial.println(state);
+    sender->setState(state);
+  }
+  if (sender == &oda_led)
+  {
+    digitalWrite(oda_led_pin, (state ? pin_on : pin_off));
+    Serial.print("oturma odası led isik Durum: ");
     Serial.println(state);
     sender->setState(state);
   }
   if (sender == &koridor_led)
   {
-    digitalWrite(koridor_led_pin, (state ? PIN_ON : PIN_OFF));
+    digitalWrite(koridor_led_pin, (state ? pin_on : pin_off));
     Serial.print("koridor led isik Durum: ");
     Serial.println(state);
     sender->setState(state);
@@ -385,7 +409,7 @@ void setup()
   pinMode(koridor_pir1_pin, INPUT);
   pinMode(koridor_pir2_pin, INPUT);
   pinMode(mutfak_pir_pin, INPUT);
-  pinMode(titresim_sensor_pin, INPUT_PULLUP);
+  pinMode(titresim_sensor_pin, INPUT);
   pinMode(yatak_odasi_pir_pin, INPUT);
   pinMode(oturma_odasi_pir_pin, INPUT);
   pinMode(cocuk_odasi_pir_pin, INPUT);
@@ -393,29 +417,29 @@ void setup()
 
   pinMode(elektrik_onOff_pin, INPUT_PULLUP);
 
-  digitalWrite(titresim_sensor_pin, LOW);
-  digitalWrite(koridor_pir1_pin, LOW);
-  digitalWrite(koridor_pir2_pin, LOW);
-  digitalWrite(mutfak_pir_pin, LOW);
-  digitalWrite(yatak_odasi_pir_pin, LOW);
-  digitalWrite(oturma_odasi_pir_pin, LOW);
-  digitalWrite(cocuk_odasi_pir_pin, LOW);
-  // digitalWrite(esp32_alarm_on_off_pin, LOW);
+  // digitalWrite(titresim_sensor_pin, pin_off);
+  // digitalWrite(koridor_pir1_pin, pin_off);
+  // digitalWrite(koridor_pir2_pin, pin_off);
+  // digitalWrite(mutfak_pir_pin, pin_off);
+  // digitalWrite(yatak_odasi_pir_pin, pin_off);
+  // digitalWrite(oturma_odasi_pir_pin, pin_off);
+  // digitalWrite(cocuk_odasi_pir_pin, pin_off);
+  //  digitalWrite(esp32_alarm_on_off_pin, LOW);
+  // digitalWrite(elektrik_onOff_pin, pin_off);
 
-  digitalWrite(elektrik_onOff_pin, LOW);
-
-  digitalWrite(reset_pin, HIGH);
-  delay(200);
   pinMode(reset_pin, OUTPUT);
+  delay(200);
+  digitalWrite(reset_pin, HIGH);
 
   pinMode(kapi_durum_pin, INPUT);
-  digitalWrite(kapi_durum_pin, PIN_ON);
+  digitalWrite(kapi_durum_pin, pin_on);
   kapi_durum = digitalRead(kapi_durum_pin);
 
   titresim_durum = digitalRead(titresim_sensor_pin);
 
   pinMode(kombi_role_pin, OUTPUT);
   pinMode(mutfak_isik_pin, OUTPUT);
+  pinMode(mutfak_led_isik_pin, OUTPUT);
   pinMode(koridor_led_pin, OUTPUT);
   pinMode(oda_led_pin, OUTPUT);
   pinMode(oda_lambasi_pin, OUTPUT);
@@ -423,18 +447,19 @@ void setup()
   pinMode(banyo_havalandirma_pin, OUTPUT);
   pinMode(oturma_odasi_priz_pin, OUTPUT);
   pinMode(modem_on_off_pin, OUTPUT);
-  pinMode(rasberry_on_off_pin, OUTPUT);
+  // pinMode(rasberry_on_off_pin, OUTPUT);
 
-  digitalWrite(kombi_role_pin, PIN_OFF);
-  digitalWrite(mutfak_isik_pin, PIN_OFF);
-  digitalWrite(koridor_led_pin, PIN_OFF);
-  digitalWrite(oda_led_pin, PIN_OFF);
-  digitalWrite(oda_lambasi_pin, PIN_OFF);
-  digitalWrite(alarm_siren_pin, PIN_OFF);
-  digitalWrite(banyo_havalandirma_pin, PIN_OFF);
-  digitalWrite(oturma_odasi_priz_pin, PIN_OFF);
-  digitalWrite(modem_on_off_pin, PIN_ON);
-  digitalWrite(rasberry_on_off_pin, PIN_ON);
+  digitalWrite(kombi_role_pin, pin_off);
+  digitalWrite(mutfak_isik_pin, pin_off);
+  digitalWrite(mutfak_led_isik_pin, pin_off);
+  digitalWrite(koridor_led_pin, pin_off);
+  digitalWrite(oda_led_pin, pin_off);
+  digitalWrite(oda_lambasi_pin, pin_off);
+  digitalWrite(alarm_siren_pin, pin_off);
+  digitalWrite(banyo_havalandirma_pin, pin_off);
+  digitalWrite(oturma_odasi_priz_pin, pin_off);
+  digitalWrite(modem_on_off_pin, pin_on);
+  // digitalWrite(rasberry_on_off_pin, pin_on);
 
   // BINARY SENSORLER
   //---------------------------------------------------------
@@ -477,11 +502,12 @@ void setup()
   //---------------------------------------------------------
   // Switch ler
   //---------------------------------------------------------
-  kombi.setName("Kombi Durum");
+  kombi.setName("Kombi");
   kombi.setDeviceClass("switch");
   // kombi.setRetain(true);
   kombi.isAvailabilityConfigured();
   kombi.setIcon("mdi:water-boiler");
+  kombi.turnOff();
 
   alarm_siren.setName("Siren Durum");
   alarm_siren.setDeviceClass("switch");
@@ -494,12 +520,16 @@ void setup()
   koridor_led.isAvailabilityConfigured();
 
   oda_led.setName("Oda Led ");
-  // koridor_led.setRetain(true);
+  // oda_led.setRetain(true);
   oda_led.isAvailabilityConfigured();
 
   mutfak_isik.setName("Mutfak Işık");
   // mutfak_isik.setRetain(true);
   mutfak_isik.isAvailabilityConfigured();
+
+  mutfak_led.setName("Mutfak Led");
+  // mutfak_isik.setRetain(true);
+  mutfak_led.isAvailabilityConfigured();
 
   ana_oda_isik.setName("Oturma Odası Işık");
   // ana_oda_isik.setRetain(true);
@@ -514,26 +544,26 @@ void setup()
   oturma_odasi_priz.setDeviceClass("switch");
   // oturma_odasi_priz.setRetain(true);
 
-  modem_on_off.setName("Modem ve Raspberry");
+  modem_on_off.setName("Modem");
   modem_on_off.setDeviceClass("switch");
   // modem_on_off.setRetain(true);
 
   //---------------------------------------------------------
   // SENSORLER
   //---------------------------------------------------------
-  temperature_home.setName("Ev Sıcaklık Durumu");
+  temperature_home.setName("Ev Sıcaklık");
   temperature_home.setDeviceClass("temperature");
   temperature_home.setUnitOfMeasurement("°C");
 
-  humanity_home.setName("Ev Nem Durumu");
+  humanity_home.setName("Ev Nem");
   humanity_home.setDeviceClass("humidity");
   humanity_home.setUnitOfMeasurement("%");
 
-  temperature_banyo.setName("Banyo Dışı Sıcaklık Durumu");
+  temperature_banyo.setName("Banyo İçi Sıcaklık");
   temperature_banyo.setDeviceClass("temperature");
   temperature_banyo.setUnitOfMeasurement("°C");
 
-  humanity_banyo.setName("Banya Dışı Nem Durumu");
+  humanity_banyo.setName("Banya İçi Nem");
   humanity_banyo.setDeviceClass("humidity");
   humanity_banyo.setUnitOfMeasurement("%");
 
@@ -543,7 +573,7 @@ void setup()
 
   voltaj_olcer_sensor.setName("Akü Voltaj");
   voltaj_olcer_sensor.setDeviceClass("voltage");
-  voltaj_olcer_sensor.setUnitOfMeasurement("mV");
+  voltaj_olcer_sensor.setUnitOfMeasurement("V");
 
   // Role durumlarını Kontrol Etme
   mqtt.onMessage(onMessage);
@@ -551,6 +581,7 @@ void setup()
 
   kombi.onCommand(onSwitchCommand);
   mutfak_isik.onStateCommand(onLightCommand);
+  mutfak_led.onStateCommand(onLightCommand);
   ana_oda_isik.onStateCommand(onLightCommand);
   koridor_led.onStateCommand(onLightCommand);
   oda_led.onStateCommand(onLightCommand);
@@ -578,10 +609,11 @@ void dbug()
   Serial.print(kapi_durum);
   Serial.print(" |YatakOdasi: ");
   Serial.print(yatak_odasi_pir_durum);
-  Serial.print(" |Titreşim: ");
-  Serial.print(titresim_durum);
   Serial.print(" |CocukOdasi: ");
   Serial.print(cocuk_odasi_pir_durum);
+  Serial.print(" |Titreşim: ");
+  Serial.print(titresim_durum);
+
   Serial.print(" |OturmaOdasi: ");
   Serial.print(oturma_odasi_pir_durum);
   Serial.print(" |ModemOnOFF: ");
@@ -628,22 +660,22 @@ void alarmMod()
   {
     if (alarm_durum) // alarm aktif ve internet bağlantısı yok ise
     {
-      if (digitalRead(alarm_siren_pin) == PIN_OFF || mutfak_pir_durum || koridor_pir1_durum || koridor_pir2_durum || oturma_odasi_pir_durum || yatak_odasi_pir_durum)
+      if (digitalRead(alarm_siren_pin) == pin_off || mutfak_pir_durum || koridor_pir1_durum || koridor_pir2_durum || oturma_odasi_pir_durum || yatak_odasi_pir_durum)
       {
         // Serialde pır durumlarını gösterir.
         delay(3000);
         if (mutfak_pir_durum || koridor_pir1_durum || koridor_pir2_durum || oturma_odasi_pir_durum || yatak_odasi_pir_durum)
         {
           Serial.println("Alarm ON , İntenet bağlantı yok, sensorlerde haraket var. Sireniniii çalıyorum.");
-          digitalWrite(alarm_siren_pin, PIN_ON);
+          digitalWrite(alarm_siren_pin, pin_on);
           alarm_isik_uyarilari(1);
         }
       }
     }
-    else if (!alarm_durum && digitalRead(alarm_siren_pin) == PIN_ON)
+    else if (!alarm_durum && digitalRead(alarm_siren_pin) == pin_on)
     {
       Serial.println("İnternet yok, ESP'den Alarm kapa geldi. Siren Kapatılıyor.");
-      digitalWrite(alarm_siren_pin, PIN_OFF);
+      digitalWrite(alarm_siren_pin, pin_off);
       alarm_isik_uyarilari(0);
     }
   }
@@ -661,8 +693,7 @@ void loop()
       Serial.println("Elektrik yok ve Akü zayıf. Modem kapatılıyor...");
       modem_on_off.setCurrentState(false);
       delay(10000);
-      digitalWrite(modem_on_off_pin, PIN_OFF);
-      digitalWrite(rasberry_on_off_pin, PIN_OFF);
+      digitalWrite(modem_on_off_pin, pin_off);
       modem_on_off_durum = false;
     }
   */
@@ -671,11 +702,17 @@ void loop()
   if (now - lastMsg4 > 10000)
   {
 
-    Serial.print("Bağlantı Kontrol => ");
-    Serial.println(Ethernet.linkStatus());
-    Serial.print("mqtt.isconnected: ");
+    Serial.print("Ethernet Status => ");
+    Serial.print(Ethernet.linkStatus());
+    Serial.print(" => mqtt.isconnected: ");
     Serial.println(mqtt.isConnected());
-    if (elektrik_onOff_durum && modem_on_off_durum && (internet_baglanti_durum == 1 || mqtt.isConnected() == 0))
+    Serial.print("Elektrik onoff: ");
+    Serial.print(elektrik_onOff_durum);
+    Serial.print("  =>Modem onoff: ");
+    Serial.print(modem_on_off_durum);
+    Serial.print("  =>internet baglantı durumu: ");
+    Serial.println(internet_baglanti_durum);
+    if (internet_baglanti_durum != 2 && elektrik_onOff_durum && modem_on_off_durum && (internet_baglanti_durum == 1 || mqtt.isConnected() == 0))
     {
       Serial.println("Yeniden bağlanılıyor.");
       reconnect();
@@ -718,7 +755,7 @@ void loop()
   }
   if (now - lastMsg3 > 50)
   {
-    Ethernet.maintain();
+
     if (internet_baglanti_durum == 1)
     {
       // Serial.println("Mqtt loop");
@@ -731,12 +768,21 @@ void loop()
   if (now - lastMsg > 60000)
   {
     // akim_volt_olcer();
+    Serial.print("60sn LinkStatus: ");
+    Serial.println(Ethernet.linkStatus());
+    if (Ethernet.linkStatus() != 2)
+    {
+      Serial.println("Etnernet Maintain başlangıç");
+      Ethernet.maintain();
+      Serial.println("Etnernet Maintain bitti");
+    }
+
     temp = dht_ev_ici.readTemperature();
     hum = dht_ev_ici.readHumidity();
-    Serial.print("=>>>Ev Sıcaklık : ");
-    Serial.print(temp);
-    Serial.print(" Ev Nem: ");
-    Serial.println(hum);
+    // Serial.print("=>>>Ev Sıcaklık : ");
+    // Serial.print(temp);
+    // Serial.print(" Ev Nem: ");
+    // Serial.println(hum);
 
     temp_banyo = dht_banyo.readTemperature();
     hum_banyo = dht_banyo.readHumidity();
@@ -744,14 +790,17 @@ void loop()
     Serial.print(temp_banyo);
     Serial.print(" Banyo Nem: ");
     Serial.println(hum_banyo);
+    Serial.print("Modem On Off Durum");
+    Serial.println(modem_on_off_durum);
+    Serial.print("internet baglantı durum");
+    Serial.println(internet_baglanti_durum);
+
     if (modem_on_off_durum && internet_baglanti_durum == 1)
     {
       temperature_home.setValue(String(temp).c_str());
       humanity_home.setValue(String(hum).c_str());
       temperature_banyo.setValue(String(temp_banyo).c_str());
       humanity_banyo.setValue(String(hum_banyo).c_str());
-      akim_olcer_sensor.setValue(String(amper).c_str());
-      voltaj_olcer_sensor.setValue(String(voltaj).c_str());
     }
     // publishData(_temp, _hum);
     lastMsg = now;
@@ -776,16 +825,16 @@ void loop()
     internet_baglanti_durum = Ethernet.linkStatus();
     // modem_on_off_durum = false;
 
-    // dbug();
-    // akim_volt_olcer();
+    dbug();
+    akim_volt_olcer();
 
     // Serial.print("mqtt.isconnected: ");
     // Serial.println(mqtt.isConnected());
     if (!modem_on_off_durum && elektrik_onOff_durum)
     {
       Serial.println("Elektrik geldi, rasperyy ve modem kapalıdan => Açık duruma Getirildi!!!");
-      digitalWrite(modem_on_off_pin, PIN_ON);
-      digitalWrite(rasberry_on_off_pin, PIN_ON);
+      digitalWrite(modem_on_off_pin, pin_on);
+
       modem_on_off_durum = true;
     }
     if (!alarm_durum && esp32_alarm_on_off_durum == 1 && (!modem_on_off_durum || internet_baglanti_durum != 1))
@@ -811,6 +860,8 @@ void loop()
       oturma_odasi_pir.setState(oturma_odasi_pir_durum);
       elektrik_onOff.setState(elektrik_onOff_durum);
       modem_on_off.setState(modem_on_off_durum);
+      akim_olcer_sensor.setValue(String(amper).c_str());
+      voltaj_olcer_sensor.setValue(String(voltaj).c_str());
       sayac = 0;
     }
     lastMsg2 = now;
