@@ -68,6 +68,7 @@ byte sayac = 0;
 const int akim_sensor_pin = A0;
 #define yatak_odasi_pir_pin 33
 #define cocuk_odasi_pir_pin 36
+#define kamera_pin 24
 
 //-----------------------------------------
 
@@ -150,12 +151,13 @@ void akim_volt_olcer()
     delay(1);
   }
   voltaj = (voltaj / 1000) * 10;
+  voltaj = voltaj / 2;
   amper = ((25 - voltaj) / 48); // AKIM HESAPLA
   Serial.print("=>>>Voltaj: ");
   Serial.print(voltaj);
   Serial.print(" =>Amper: ");
   Serial.println(amper);
-  elektrik_onOff_durum = digitalRead(elektrik_onOff_pin);
+  // elektrik_onOff_durum = digitalRead(elektrik_onOff_pin);
 }
 int internet_baglanti_durum = 0;
 
@@ -272,6 +274,7 @@ HALight oda_led("oda_led");
 HASwitch alarm_siren("alarm_siren");
 HASwitch banyo_havalandirma("banyo_havalandirma");
 HASwitch oturma_odasi_priz("oturma_odasi_priz");
+HASwitch kamera("kamera");
 
 void alarm_isik_uyarilari(bool uyari_tip)
 {
@@ -347,7 +350,11 @@ void onSwitchCommand(bool state, HASwitch *sender)
     }
     sender->setState(state);
   }
-
+  if (sender == &kamera)
+  {
+    digitalWrite(kamera_pin, (state ? pin_on : pin_off));
+    sender->setState(state);
+  }
   // report state back to the Home Assistant
 }
 
@@ -415,7 +422,7 @@ void setup()
   pinMode(cocuk_odasi_pir_pin, INPUT);
   pinMode(esp32_alarm_on_off_pin, INPUT);
 
-  pinMode(elektrik_onOff_pin, INPUT_PULLUP);
+  pinMode(elektrik_onOff_pin, INPUT);
 
   // digitalWrite(titresim_sensor_pin, pin_off);
   // digitalWrite(koridor_pir1_pin, pin_off);
@@ -447,6 +454,8 @@ void setup()
   pinMode(banyo_havalandirma_pin, OUTPUT);
   pinMode(oturma_odasi_priz_pin, OUTPUT);
   pinMode(modem_on_off_pin, OUTPUT);
+  pinMode(kamera_pin, OUTPUT);
+
   // pinMode(rasberry_on_off_pin, OUTPUT);
 
   digitalWrite(kombi_role_pin, pin_off);
@@ -459,6 +468,7 @@ void setup()
   digitalWrite(banyo_havalandirma_pin, pin_off);
   digitalWrite(oturma_odasi_priz_pin, pin_off);
   digitalWrite(modem_on_off_pin, pin_on);
+  digitalWrite(kamera_pin, pin_on);
   // digitalWrite(rasberry_on_off_pin, pin_on);
 
   // BINARY SENSORLER
@@ -546,7 +556,14 @@ void setup()
 
   modem_on_off.setName("Modem");
   modem_on_off.setDeviceClass("switch");
+  modem_on_off.setIcon("mdi:ethernet");
+
   // modem_on_off.setRetain(true);
+  kamera.setName("Kamera");
+  kamera.setDeviceClass("switch");
+  kamera.setCurrentState(true);
+  kamera.setIcon("mdi:camera");
+  // kamera.setRetain(true);
 
   //---------------------------------------------------------
   // SENSORLER
@@ -589,6 +606,7 @@ void setup()
   banyo_havalandirma.onCommand(onSwitchCommand);
   oturma_odasi_priz.onCommand(onSwitchCommand);
   modem_on_off.onCommand(onSwitchCommand);
+  kamera.onCommand(onSwitchCommand);
 
   dht_ev_ici.begin();
   dht_banyo.begin();
@@ -809,7 +827,7 @@ void loop()
 
   // HAREKET SENSORLERI KODLARI
   //----------- PIR KOD BAŞ. -----------------
-  if (now - lastMsg2 > 1000)
+  if (now - lastMsg2 > 300)
   {
 
     esp32_alarm_on_off_durum = digitalRead(esp32_alarm_on_off_pin);
@@ -821,7 +839,15 @@ void loop()
     yatak_odasi_pir_durum = digitalRead(yatak_odasi_pir_pin);
     cocuk_odasi_pir_durum = digitalRead(cocuk_odasi_pir_pin);
     oturma_odasi_pir_durum = digitalRead(oturma_odasi_pir_pin);
-    elektrik_onOff_durum = digitalRead(elektrik_onOff_pin);
+    if (digitalRead(elektrik_onOff_pin))
+    {
+      elektrik_onOff_durum = false;
+    }
+    else
+    {
+      elektrik_onOff_durum = true;
+    }
+
     internet_baglanti_durum = Ethernet.linkStatus();
     // modem_on_off_durum = false;
 
